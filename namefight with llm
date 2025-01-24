@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>名字打架看看谁厉害</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f9f4e7;
+            color: #333;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 30px;
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            font-size: 2.5em;
+            color: #4e4b3b;
+            margin-bottom: 30px;
+        }
+        .input-section, .battle-section, .history-section {
+            margin: 20px 0;
+        }
+        .input-section select,
+        .input-section input {
+            padding: 8px;
+            margin: 10px 0;
+            font-size: 1em;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            width: 250px;
+        }
+        button {
+            padding: 12px 25px;
+            font-size: 1.2em;
+            background-color: #ffe156;
+            border: 2px solid #4e4b3b;
+            border-radius: 5px;
+            cursor: pointer;
+            color: #4e4b3b;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #ffcd4d;
+        }
+        .battle-log {
+            text-align: left;
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #fef8e1;
+            border: 1px solid #e0d9b9;
+            border-radius: 5px;
+            height: 300px;
+            overflow-y: scroll;
+            font-family: "Courier New", monospace;
+        }
+        .history-list {
+            list-style-type: none;
+            padding: 0;
+        }
+        .history-list li {
+            padding: 8px;
+            background-color: #ffeb99;
+            border-radius: 5px;
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>名字打架看看谁厉害</h1>
+
+        <!-- 输入名字模块 -->
+        <div class="input-section">
+            <h2 id="battle-players-title">X人决斗？</h2>
+            <select id="playerCount" onchange="updateInputs()">
+                <option value="2">2人</option>
+                <option value="3">3人</option>
+                <option value="4">4人</option>
+            </select>
+
+            <div id="playerInputs" class="player-inputs">
+                <label>玩家1：<input type="text" id="player1" /></label><br>
+                <label>玩家2：<input type="text" id="player2" /></label><br>
+            </div>
+            <button onclick="startBattle()">开始战斗</button>
+        </div>
+
+        <!-- 战斗阅览模块 -->
+        <div class="battle-section">
+            <h2>战斗过程</h2>
+            <div id="battleLog" class="battle-log"></div>
+        </div>
+
+        <!-- 历史战斗记录 -->
+        <div class="history-section">
+            <h2>历史战斗记录</h2>
+            <ul id="historyList" class="history-list"></ul>
+        </div>
+    </div>
+
+    <script>
+        let players = [];
+        let battleLog = [];
+        let playerCount = 2;
+
+        // 更新玩家输入框
+        function updateInputs() {
+            playerCount = parseInt(document.getElementById('playerCount').value);
+            const playerInputs = document.getElementById('playerInputs');
+            playerInputs.innerHTML = '';
+
+            for (let i = 1; i <= playerCount; i++) {
+                playerInputs.innerHTML += `<label>玩家${i}：<input type="text" id="player${i}" /></label><br>`;
+            }
+        }
+
+
+        // 开始战斗（异步函数）
+        async function startBattle() {
+            players = [];
+            for (let i = 1; i <= playerCount; i++) {
+                const playerName = document.getElementById(`player${i}`).value.trim();
+                if (playerName === '') {
+                    alert(`请输入玩家${i}的名字`);
+                    return;
+                }
+                // 初始化每个玩家的生命值和总伤害
+                players.push({ name: playerName, health: 100, totalDamage: 0 });
+            }
+
+            battleLog = [];
+            document.getElementById('battleLog').innerHTML = '';
+            await battleRound();
+        }
+
+        // 生成回合描述
+        async function generateBattleDescription(roundDescription) {
+            // 将生成的描述传递给DeepSeek进行扩展
+            const prompt = `You are a experience writer. 请将以下战斗描述扩写为生成一个简短且有趣的中文战斗过程描述，不要改变任何数字，只生成一个回合的描述，格式为“回合X：攻击者攻击了被攻击者，造成的伤害...，现在场上玩家生命值为XXX”。以下是战斗描述：${roundDescription}`;
+
+            const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json; charset=utf-8',
+                    'Authorization': 'Bearer sk-x'  // 替换为你的 DeepSeek API 密钥
+                },
+                body: JSON.stringify({
+                    model: "deepseek-chat",
+                    messages: [
+                        { role: "system", content: "You are a experience writer." },
+                        { role: "user", content: prompt }
+                    ],
+                    stream: false
+                })
+            });
+
+            const data = await response.json();
+            return data.choices[0].message.content;  // 返回生成的战斗描述
+        }
+
+        // 战斗回合
+        async function battleRound() {
+            let alivePlayers = players.filter(player => player.health > 0);
+            if (alivePlayers.length <= 1) {
+                endBattle();
+                return;
+            }
+
+            const attacker = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
+            let defender;
+            do {
+                defender = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
+            } while (attacker === defender);
+
+            // 计算攻击值，确保攻击值大于10
+            const attackValue = Math.floor(Math.random() * 10) + 11; 
+            defender.totalDamage += attackValue; // 累加攻击值
+            defender.health = 100 - defender.totalDamage;  // 根据累计攻击值更新生命值
+
+            // 生成回合描述
+            const roundDescription = `回合${battleLog.length + 1}: ${attacker.name} 攻击了 ${defender.name}，攻击造成伤害：${attackValue}，在场所有人的生命值：${players.map(p => `${p.name}: ${p.health}`).join(', ')}`;
+            battleLog.push(await generateBattleDescription(roundDescription));  // 获取并显示战斗描述
+
+            document.getElementById('battleLog').innerHTML = battleLog.join('<br>');
+            setTimeout(battleRound, 1500); // 每1.5秒继续进行下一回合
+        }
+
+        // 战斗结束
+        function endBattle() {
+            const winner = players.find(player => player.health > 0);
+            if (winner) {
+                const historyList = document.getElementById('historyList');
+                historyList.innerHTML += `<li>${players.map(player => player.name).join(' vs ')} - 胜利者: ${winner.name}</li>`;
+            }
+        }
+    </script>
+
+</body>
+</html>
